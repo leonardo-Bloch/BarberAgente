@@ -19,7 +19,7 @@ def inicializar_banco():
     print(f"\n--- Iniciando Verificação do Banco de Dados ---")
     
     try:
-        # 1. Tentativa de conexão com o Master
+        # 1. Tentativa de conexão com o Master (para garantir que o banco exista)
         print(f"[*] Tentando conectar ao servidor {SERVER}...", end=" ", flush=True)
         conn_master = pyodbc.connect(
             string_conexao.replace(DATABASE, 'master'), 
@@ -34,15 +34,15 @@ def inicializar_banco():
         conn_master.close()
         print("OK (Criado ou já existente).")
 
-        # 3. Conexão com o banco específico
+        # 3. Conexão com o banco específico para criar as tabelas
         print(f"[*] Acessando o banco '{DATABASE}'...", end=" ", flush=True)
         conn = pyodbc.connect(string_conexao)
         cursor = conn.cursor()
         print("SUCESSO!")
 
-        # 4. Verificação/Criação da Tabela
+        # 4. Verificação/Criação da Tabela de Agendamentos
         print(f"[*] Verificando estrutura da tabela 'Agendamentos'...", end=" ", flush=True)
-        sql_create_table = """
+        sql_agendamentos = """
         IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Agendamentos')
         BEGIN
             CREATE TABLE Agendamentos (
@@ -55,9 +55,28 @@ def inicializar_banco():
             );
         END
         """
-        cursor.execute(sql_create_table)
-        conn.commit()
-        print("TABELA PRONTA!")
+        cursor.execute(sql_agendamentos)
+        print("PRONTA!")
+
+        # 5. Verificação/Criação da Tabela de Usuarios (NOVIDADE)
+        print(f"[*] Verificando estrutura da tabela 'Usuarios'...", end=" ", flush=True)
+        # Latin1_General_CS_AS = Case Sensitive (Diferencia maiúsculas de minúsculas)
+        sql_usuarios = """
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Usuarios')
+        BEGIN
+            CREATE TABLE Usuarios (
+                Id INT PRIMARY KEY IDENTITY(1,1),
+                Usuario VARCHAR(50) COLLATE Latin1_General_CS_AS NOT NULL UNIQUE,
+                Senha VARCHAR(50) COLLATE Latin1_General_CS_AS NOT NULL
+            );
+            
+            -- Inserção do Usuário Coringa (Mestre) após criar a tabela
+            INSERT INTO Usuarios (Usuario, Senha) VALUES ('Mestre', 'Barber@2026');
+        END
+        """
+        cursor.execute(sql_usuarios)
+        conn.commit() # Salva as alterações
+        print("PRONTA!")
 
         print("\n" + "="*40)
         print("✅ CONEXÃO E INICIALIZAÇÃO BEM-SUCEDIDAS!")
@@ -75,13 +94,11 @@ def inicializar_banco():
         print(f"\n❌ ERRO INESPERADO: {e}")
         return None
 
-# Gatilho de execução manual
+# Gatilho de execução manual para teste
 if __name__ == "__main__":
     conexao = inicializar_banco()
     
     if conexao:
-        # Mantém a conexão aberta se quiser testar algo mais, 
-        # ou apenas fecha para finalizar o teste.
         conexao.close()
         print("\n[Status] Script finalizado com êxito.")
     else:
