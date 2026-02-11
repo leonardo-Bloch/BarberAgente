@@ -15,7 +15,7 @@ O **BarberAgente** é uma solução inteligente para a gestão de agendamentos e
 
 * **Frontend:** Interface: CustomTkinter (Moderna e Simples)
 * **Backend:** Python 
-* **Banco de Dados:** SQLite ou PostgreSQL
+* **Banco de Dados:** PostgreSQL
 
 
 
