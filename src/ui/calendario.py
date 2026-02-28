@@ -21,57 +21,167 @@ def aplicar_id_app():
 
 aplicar_id_app()
 
-CAMINHO_IMG = r'C:\Users\Windows 10\Documents\BarberProject\public\img\icon.ico'
+# Ajuste de Caminhos
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', '..'))
-sys.path.append(os.path.join(ROOT_DIR, 'src'))
+if os.path.join(ROOT_DIR, 'src') not in sys.path:
+    sys.path.append(os.path.join(ROOT_DIR, 'src'))
 
 from database.connection import inicializar_banco
 
+class JanelaGerenciarUsuarios(ctk.CTkToplevel):
+    """Janela de gestão: Apenas o 'Mestre' pode cadastrar e deletar"""
+    def __init__(self, master, conn, usuario_logado):
+        super().__init__(master)
+        self.conn = conn
+        self.usuario_logado = usuario_logado.lower() # Normaliza para checagem
+        self.title("Equipe BarberAgente")
+        self.geometry("450x650")
+        self.attributes("-topmost", True)
+        self.grab_set() 
+        self.setup_ui()
+        self.atualizar_lista_barbeiros()
+
+    def setup_ui(self):
+        # --- SEÇÃO DE CADASTRO (Bloqueada se não for Admin) ---
+        ctk.CTkLabel(self, text="NOVO BARBEIRO", font=("Impact", 25), text_color="#3b8ed0").pack(pady=(20, 10))
+        
+        self.frame_add = ctk.CTkFrame(self, border_width=2, corner_radius=15)
+        self.frame_add.pack(pady=10, padx=30, fill="x")
+
+        self.ent_novo_user = ctk.CTkEntry(self.frame_add, placeholder_text="Nome de Usuário", width=250)
+        self.ent_novo_user.pack(pady=(15, 5))
+
+        self.ent_nova_pass = ctk.CTkEntry(self.frame_add, placeholder_text="Senha", show="*", width=250)
+        self.ent_nova_pass.pack(pady=5)
+
+        self.btn_salvar = ctk.CTkButton(self.frame_add, text="CADASTRAR", 
+                                        fg_color="#28a745", hover_color="#218838", font=("Arial", 12, "bold"),
+                                        command=self.salvar_usuario)
+        self.btn_salvar.pack(pady=15)
+
+        # Restrição visual: Desabilita cadastro para quem não é Mestre
+        if self.usuario_logado != "mestre":
+            self.ent_novo_user.configure(state="disabled", placeholder_text="Apenas Admin pode cadastrar")
+            self.ent_nova_pass.configure(state="disabled")
+            self.btn_salvar.configure(state="disabled", fg_color="gray")
+
+        # --- SEÇÃO DE LISTAGEM ---
+        ctk.CTkLabel(self, text="BARBEIROS ATIVOS", font=("Impact", 20)).pack(pady=(20, 5))
+        
+        self.scroll_lista = ctk.CTkScrollableFrame(self, width=380, height=250, border_width=2)
+        self.scroll_lista.pack(pady=10, padx=30, fill="both", expand=True)
+
+    def salvar_usuario(self):
+        if self.usuario_logado != "mestre":
+            messagebox.showerror("Acesso Negado", "Você não tem permissão para cadastrar.")
+            return
+            
+        user = self.ent_novo_user.get().strip()
+        senha = self.ent_nova_pass.get().strip()
+        
+        if not user or not senha:
+            messagebox.showwarning("Aviso", "Preencha todos os campos!")
+            return
+
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("INSERT INTO Usuarios (Usuario, Senha) VALUES (?, ?)", (user, senha))
+            self.conn.commit()
+            self.ent_novo_user.delete(0, 'end')
+            self.ent_nova_pass.delete(0, 'end')
+            self.atualizar_lista_barbeiros()
+            messagebox.showinfo("Sucesso", "Barbeiro adicionado!")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha: {e}")
+
+    def atualizar_lista_barbeiros(self):
+        for widget in self.scroll_lista.winfo_children():
+            widget.destroy()
+
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT Usuario FROM Usuarios ORDER BY Usuario ASC")
+            usuarios = cursor.fetchall()
+
+            for (nome,) in usuarios:
+                linha = ctk.CTkFrame(self.scroll_lista, fg_color="transparent")
+                linha.pack(fill="x", pady=2)
+
+                ctk.CTkLabel(linha, text=f"👤 {nome}", font=("Arial", 12)).pack(side="left", padx=10)
+                
+                # SÓ MOSTRA O BOTÃO DE REMOVER SE O LOGADO FOR 'MESTRE'
+                # E NÃO PERMITE QUE O MESTRE DELETE A SI MESMO
+                if self.usuario_logado == "mestre" and nome.lower() != "mestre":
+                    btn_del = ctk.CTkButton(linha, text="REMOVER", width=70, height=24,
+                                            fg_color="#C0392B", hover_color="#962D22",
+                                            command=lambda n=nome: self.deletar_usuario(n))
+                    btn_del.pack(side="right", padx=10)
+                elif nome.lower() == "mestre":
+                    ctk.CTkLabel(linha, text="[ADMIN]", text_color="gray").pack(side="right", padx=10)
+        except Exception as e:
+            print(f"Erro ao listar: {e}")
+
+    def deletar_usuario(self, nome_user):
+        if self.usuario_logado != "mestre":
+            messagebox.showerror("Erro", "Ação não permitida.")
+            return
+
+        if messagebox.askyesno("Confirmar", f"Remover o acesso de '{nome_user}'?"):
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute("DELETE FROM Usuarios WHERE Usuario = ?", (nome_user,))
+                self.conn.commit()
+                self.atualizar_lista_barbeiros()
+                messagebox.showinfo("Sucesso", "Usuário removido.")
+            except Exception as e:
+                messagebox.showerror("Erro", f"Erro: {e}")
+
 class BarberAgenteApp(ctk.CTk):
-    def __init__(self, on_logout=None):
+    def __init__(self, usuario_atual="Barbeiro", on_logout=None): # Recebe quem logou
         super().__init__()
         self.on_logout = on_logout 
-        self.title("BarberAgente v1.0")
+        self.usuario_atual = usuario_atual
+        self.title(f"BarberAgente v1.0 - Logado como: {self.usuario_atual}")
         self.geometry("550x850") 
-        self.configurar_icone_taskbar()
-
+        
         self.conn = inicializar_banco()
-        if self.conn:
-            self.cursor = self.conn.cursor()
-        else:
+        if not self.conn:
             messagebox.showerror("Erro", "Falha na conexão com o banco.")
             self.destroy()
             return
+        self.cursor = self.conn.cursor()
 
+        self.configurar_icone_taskbar()
         self.setup_ui()
         self.atualizar_relogio()
         self.atualizar_lista_agenda()
 
     def configurar_icone_taskbar(self):
-        caminho_icone = r"C:\Users\Windows 10\Documents\BarberProject\public\img\icon.ico"
+        caminho_icone = os.path.join(ROOT_DIR, "public", "img", "icon.ico")
         if os.path.exists(caminho_icone):
             try:
-                pil_img = Image.open(caminho_icone)
-                self.icon_tk = ImageTk.PhotoImage(pil_img)
-                self.wm_iconphoto(True, self.icon_tk)
                 self.iconbitmap(caminho_icone)
-            except Exception as e:
-                print(f"Erro ao aplicar ícone: {e}")
+            except: pass
 
     def setup_ui(self):
-        self.btn_logout = ctk.CTkButton(self, text="⬅ TROCAR CONTA", font=("Arial", 11, "bold"),
-                                        fg_color="#E74C3C", hover_color="#C0392B", width=120,
-                                        command=self.executar_logout)
-        self.btn_logout.place(x=410, y=20)
-
-        self.btn_admin = ctk.CTkButton(self, text="⚙ GERENCIAR ACESSOS", font=("Arial", 11, "bold"),
-                                       fg_color="#444", hover_color="#666", width=150,
+        # Botão Gestão
+        self.btn_admin = ctk.CTkButton(self, text="⚙ GESTÃO BARBEIROS", font=("Arial", 11, "bold"),
+                                       fg_color="#444", hover_color="#666", width=100,
                                        command=self.abrir_gestao_usuarios)
         self.btn_admin.place(x=20, y=20)
 
+        self.btn_logout = ctk.CTkButton(self, text="⬅ SAIR", font=("Arial", 11, "bold"),
+                                        fg_color="#E74C3C", hover_color="#C0392B", width=100,
+                                        command=self.executar_logout)
+        self.btn_logout.place(x=430, y=20)
+
         self.lbl_nome_app = ctk.CTkLabel(self, text="BARBER AGENTE", font=("Impact", 35), text_color="#3b8ed0")
         self.lbl_nome_app.pack(pady=(70, 0))
+
+        # Mostra o nome do usuário na tela principal para saber quem está operando
+        self.lbl_user_info = ctk.CTkLabel(self, text=f"Operador: {self.usuario_atual}", text_color="gray")
+        self.lbl_user_info.pack()
 
         self.lbl_relogio = ctk.CTkLabel(self, text="", font=("Arial", 18, "bold"))
         self.lbl_relogio.pack(pady=5)
@@ -85,86 +195,49 @@ class BarberAgenteApp(ctk.CTk):
                              locale='pt_BR', date_pattern='y-mm-dd')
         self.cal.pack(pady=10)
 
-        ctk.CTkLabel(self.frame_inputs, text="Horário (Digite ou Selecione):", font=("Arial", 13, "bold")).pack(pady=(5, 0))
         self.time_frame = ctk.CTkFrame(self.frame_inputs, fg_color="transparent")
         self.time_frame.pack(pady=10)
-
-        self.ent_hora = ctk.CTkComboBox(self.time_frame, width=90, border_width=2,
-                                        values=[f"{i:02d}" for i in range(8, 21)])
+        self.ent_hora = ctk.CTkComboBox(self.time_frame, width=90, values=[f"{i:02d}" for i in range(8, 21)])
         self.ent_hora.set("10")
         self.ent_hora.pack(side="left", padx=5)
-
         ctk.CTkLabel(self.time_frame, text=":", font=("Arial", 18, "bold")).pack(side="left")
-
-        self.ent_minuto = ctk.CTkComboBox(self.time_frame, width=90, border_width=2,
-                                          values=["00", "15", "30", "45"])
+        self.ent_minuto = ctk.CTkComboBox(self.time_frame, width=90, values=["00", "15", "30", "45"])
         self.ent_minuto.set("00")
         self.ent_minuto.pack(side="left", padx=5)
 
         self.btn_agendar = ctk.CTkButton(self, text="VERIFICAR E AGENDAR", font=("Arial", 14, "bold"),
-                                         fg_color="#3b8ed0", hover_color="#2a699d", 
-                                         border_width=2, corner_radius=10,
-                                         command=self.processar_agendamento)
+                                         fg_color="#3b8ed0", height=45, command=self.processar_agendamento)
         self.btn_agendar.pack(pady=20)
 
         self.scroll_agenda = ctk.CTkScrollableFrame(self, width=450, height=300, border_width=2)
         self.scroll_agenda.pack(pady=10, padx=20, fill="both", expand=True)
 
-    def executar_logout(self):
-        if messagebox.askyesno("Sair", "Deseja encerrar a sessão e trocar de conta?"):
-            self.destroy()
-            if self.on_logout:
-                self.on_logout()
+    def abrir_gestao_usuarios(self):
+        # Passa o nome do usuário logado para a janela filha
+        JanelaGerenciarUsuarios(self, self.conn, self.usuario_atual)
 
-    # --- MÉTODO MODIFICADO PARA PADRÃO ISO ---
-    # --- MÉTODO MODIFICADO PARA RESOLVER O ERRO 242 ---
+    def executar_logout(self):
+        if messagebox.askyesno("Sair", "Deseja encerrar a sessão?"):
+            self.destroy()
+            if self.on_logout: self.on_logout()
+
+    # ... (restante dos métodos processar_agendamento, atualizar_relogio, atualizar_lista_agenda, cancelar)
     def processar_agendamento(self):
-        """ Valida se a data é futura e salva no banco usando Formato ISO. """
         try:
             data_selecionada = self.cal.get_date()
-            hora = int(self.ent_hora.get())
-            minuto = int(self.ent_minuto.get())
-
-            # Criação do objeto datetime completo
-            data_hora_agendamento = datetime(data_selecionada.year, data_selecionada.month, data_selecionada.day, hora, minuto)
-            agora = datetime.now()
-
-            # Permite agendar para hoje se o horário for futuro
-            if data_hora_agendamento < agora:
-                messagebox.showerror("Erro de Data", "Não é possível realizar agendamentos no passado!")
+            data_hora_agendamento = datetime(data_selecionada.year, data_selecionada.month, data_selecionada.day, 
+                                             int(self.ent_hora.get()), int(self.ent_minuto.get()))
+            if data_hora_agendamento < datetime.now():
+                messagebox.showerror("Erro", "Não agende no passado!")
                 return
 
-            # A LINHA ABAIXO É A CHAVE: O formato ISO (YYYY-MM-DDTHH:MM:SS) é infalível no SQL Server
-            data_hora_iso = data_hora_agendamento.strftime('%Y-%m-%dT%H:%M:%S') 
-
-            # Verificação de conflito no banco
-            # DICA: Use aspas simples na query para garantir que o SQL trate como data
-            self.cursor.execute("SELECT COUNT(*) FROM Agendamentos WHERE DataHora = ?", (data_hora_iso,))
-            
-            if self.cursor.fetchone()[0] > 0:
-                messagebox.showwarning("Ocupado", "Este horário já possui agendamento.")
-                return
-
-            # Inserção correta
-            self.cursor.execute(
-                "INSERT INTO Agendamentos (DataHora, ClienteId, BarbeiroId) VALUES (?, 1, 99)", 
-                (data_hora_iso,)
-            )
-            
+            data_hora_iso = data_hora_agendamento.strftime('%Y-%m-%dT%H:%M:%S')
+            self.cursor.execute("INSERT INTO Agendamentos (DataHora, ClienteId, BarbeiroId) VALUES (?, 1, 99)", (data_hora_iso,))
             self.conn.commit()
-            messagebox.showinfo("Sucesso", "Agendado com sucesso!")
+            messagebox.showinfo("Sucesso", "Agendado!")
             self.atualizar_lista_agenda()
-
         except Exception as e:
-            # Isso ajudará a ver se o erro mudou
-            messagebox.showerror("Erro de Banco", f"Erro Técnico: {str(e)}")
-
-    def abrir_gestao_usuarios(self):
-        janela = ctk.CTkToplevel(self)
-        janela.title("Gerenciamento de Barbeiros")
-        janela.geometry("400x550")
-        janela.grab_set()
-        # ... (restante do código de gestão permanece igual)
+            messagebox.showerror("Erro", str(e))
 
     def atualizar_relogio(self):
         self.lbl_relogio.configure(text=f"Horário Atual: {datetime.now().strftime('%H:%M:%S')}")
@@ -175,9 +248,8 @@ class BarberAgenteApp(ctk.CTk):
         try:
             self.cursor.execute("SELECT Id, DataHora FROM Agendamentos ORDER BY DataHora ASC")
             for registro in self.cursor.fetchall():
-                txt = f"{registro[1].strftime('%d/%m %H:%M')} - CANCELAR"
-                btn = ctk.CTkButton(self.scroll_agenda, text=txt, fg_color="#E74C3C", 
-                                     border_width=1, command=lambda i=registro[0]: self.cancelar(i))
+                btn = ctk.CTkButton(self.scroll_agenda, text=f"{registro[1].strftime('%d/%m %H:%M')} - CANCELAR",
+                                    fg_color="#E74C3C", command=lambda i=registro[0]: self.cancelar(i))
                 btn.pack(pady=5, fill="x", padx=10)
         except: pass
 
@@ -188,5 +260,6 @@ class BarberAgenteApp(ctk.CTk):
             self.atualizar_lista_agenda()
 
 if __name__ == "__main__":
-    app = BarberAgenteApp()
+    # Para teste direto, simulamos o admin logado
+    app = BarberAgenteApp(usuario_atual="Mestre")
     app.mainloop()

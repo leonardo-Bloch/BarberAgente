@@ -1,13 +1,12 @@
 import sys
 import os
 import ctypes
-from PIL import Image, ImageTk  # <--- Faltava isso!
+from PIL import Image, ImageTk
 
 # 1. Ajuste de Caminhos para evitar ModuleNotFoundError
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(BASE_DIR, 'src'))
 
-# Agora o Python consegue encontrar estes módulos dentro de src/ui
 from ui.login import LoginApp
 from ui.calendario import BarberAgenteApp
 
@@ -22,31 +21,39 @@ def configurar_identidade_windows():
 def iniciar_sistema():
     configurar_identidade_windows()
     
-    # Caminho do ícone com 'r' para evitar erro de unicodeescape
+    # Caminho do ícone
     CAMINHO_ICONE = r"C:\Users\Windows 10\Documents\BarberProject\public\img\icon.ico"
 
-    def abrir_calendario():
-        """Inicia o calendário e configura o ícone dele"""
-        app_calendario = BarberAgenteApp(on_logout=iniciar_sistema)
+    def abrir_calendario(usuario_logado):
+        """Inicia o calendário passando o nome do usuário validado no login"""
+        # Agora o BarberAgenteApp recebe quem logou para decidir se permite excluir barbeiros
+        app_calendario = BarberAgenteApp(usuario_atual=usuario_logado, on_logout=iniciar_sistema)
         
         # Aplicando o ícone na janela do calendário
         if os.path.exists(CAMINHO_ICONE):
-            img = Image.open(CAMINHO_ICONE)
-            icon_tk = ImageTk.PhotoImage(img)
-            app_calendario.wm_iconphoto(True, icon_tk)
-            app_calendario.iconbitmap(CAMINHO_ICONE)
+            try:
+                img = Image.open(CAMINHO_ICONE)
+                icon_tk = ImageTk.PhotoImage(img)
+                app_calendario.wm_iconphoto(True, icon_tk)
+                app_calendario.iconbitmap(CAMINHO_ICONE)
+                # Mantemos uma referência para evitar que o Garbage Collector limpe a imagem
+                app_calendario._icon_ref = icon_tk 
+            except: pass
             
         app_calendario.mainloop()
 
-    # Inicia a tela de login
+    # Inicia a tela de login. 
+    # O LoginApp deve ser modificado para passar o nome do usuário no callback.
     app_login = LoginApp(on_login_success=abrir_calendario)
     
-    # Aplicando o ícone na janela de login
     if os.path.exists(CAMINHO_ICONE):
-        img_login = Image.open(CAMINHO_ICONE)
-        icon_login = ImageTk.PhotoImage(img_login)
-        app_login.wm_iconphoto(True, icon_login)
-        app_login.iconbitmap(CAMINHO_ICONE)
+        try:
+            img_login = Image.open(CAMINHO_ICONE)
+            icon_login = ImageTk.PhotoImage(img_login)
+            app_login.wm_iconphoto(True, icon_login)
+            app_login.iconbitmap(CAMINHO_ICONE)
+            app_login._icon_ref = icon_login
+        except: pass
         
     app_login.mainloop()
 
