@@ -1,61 +1,64 @@
 import sys
 import os
-import ctypes
-from PIL import Image, ImageTk
+import customtkinter as ctk
 
-# 1. Ajuste de Caminhos para evitar ModuleNotFoundError
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(BASE_DIR, 'src'))
+# --- CONFIGURAÇÃO DE CAMINHOS ---
+# Garante que a pasta 'src' seja a raiz para os imports
+caminho_projeto = os.path.dirname(os.path.abspath(__file__))
+caminho_src = os.path.join(caminho_projeto, 'src')
 
+if caminho_src not in sys.path:
+    sys.path.insert(0, caminho_src)
+
+# Imports após o ajuste de path
+from database.connection import inicializar_banco
 from ui.login import LoginApp
 from ui.calendario import BarberAgenteApp
 
-def configurar_identidade_windows():
-    """Garante que o ícone apareça na barra de tarefas do Windows"""
+class SistemaBarber:
+    """Classe Orquestradora para gerenciar as transições de tela."""
+    def __init__(self):
+        # 1. Inicializa o Banco de Dados
+        print("Conectando ao SQL Server e verificando tabelas...")
+        inicializar_banco()
+        
+        # Configuração Global de Tema
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+        
+        # Inicia o fluxo de login
+        self.usuario_logado = None
+        self.mostrar_login()
+
+    def mostrar_login(self):
+        """Abre a tela de login e aguarda o sucesso."""
+        print("Iniciando tela de acesso...")
+        self.app_login = LoginApp(on_login_success=self.finalizar_login)
+        self.app_login.mainloop()
+
+    def finalizar_login(self, dados_usuario):
+        """Recebe os dados do login e agenda a abertura da tela principal."""
+        self.usuario_logado = dados_usuario
+        print(f"Sessão iniciada para: {self.usuario_logado['nome']}")
+        
+        # O LoginApp já se destrói sozinho. Agora abrimos a principal
+        # Usamos o 'after' para garantir que o loop do login encerrou totalmente
+        self.mostrar_calendario()
+
+    def mostrar_calendario(self):
+        """Abre a tela principal do sistema."""
+        self.app_principal = BarberAgenteApp(self.usuario_logado)
+        
+        # Caso precise de uma função de Logout no futuro:
+        # self.app_principal.btn_logout.configure(command=self.realizar_logout)
+        
+        self.app_principal.mainloop()
+
+def iniciar():
     try:
-        myappid = u'leo.barberagente.agendador.v1'
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-    except Exception:
-        pass
-
-def iniciar_sistema():
-    configurar_identidade_windows()
-    
-    # Caminho do ícone
-    CAMINHO_ICONE = r"C:\Users\Windows 10\Documents\BarberProject\public\img\icon.ico"
-
-    def abrir_calendario(usuario_logado):
-        """Inicia o calendário passando o nome do usuário validado no login"""
-        # Agora o BarberAgenteApp recebe quem logou para decidir se permite excluir barbeiros
-        app_calendario = BarberAgenteApp(usuario_atual=usuario_logado, on_logout=iniciar_sistema)
-        
-        # Aplicando o ícone na janela do calendário
-        if os.path.exists(CAMINHO_ICONE):
-            try:
-                img = Image.open(CAMINHO_ICONE)
-                icon_tk = ImageTk.PhotoImage(img)
-                app_calendario.wm_iconphoto(True, icon_tk)
-                app_calendario.iconbitmap(CAMINHO_ICONE)
-                # Mantemos uma referência para evitar que o Garbage Collector limpe a imagem
-                app_calendario._icon_ref = icon_tk 
-            except: pass
-            
-        app_calendario.mainloop()
-
-    # Inicia a tela de login. 
-    # O LoginApp deve ser modificado para passar o nome do usuário no callback.
-    app_login = LoginApp(on_login_success=abrir_calendario)
-    
-    if os.path.exists(CAMINHO_ICONE):
-        try:
-            img_login = Image.open(CAMINHO_ICONE)
-            icon_login = ImageTk.PhotoImage(img_login)
-            app_login.wm_iconphoto(True, icon_login)
-            app_login.iconbitmap(CAMINHO_ICONE)
-            app_login._icon_ref = icon_login
-        except: pass
-        
-    app_login.mainloop()
+        SistemaBarber()
+    except Exception as e:
+        print(f"Erro crítico no sistema: {e}")
 
 if __name__ == "__main__":
-    iniciar_sistema()
+    iniciar()

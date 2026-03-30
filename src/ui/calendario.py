@@ -1,265 +1,263 @@
 import customtkinter as ctk
-import sys
-import os
-import ctypes
-import re
-from datetime import datetime
-from tkinter import messagebox
-from PIL import Image, ImageTk 
-from tkcalendar import DateEntry 
-
-# --- CONFIGURAÇÃO DE TEMA ---
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
-
-def aplicar_id_app():
-    try:
-        myappid = u'leo.barberagente.agendador.v1'
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-    except Exception:
-        pass
-
-aplicar_id_app()
-
-# Ajuste de Caminhos
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', '..'))
-if os.path.join(ROOT_DIR, 'src') not in sys.path:
-    sys.path.append(os.path.join(ROOT_DIR, 'src'))
-
-from database.connection import inicializar_banco
-
-class JanelaGerenciarUsuarios(ctk.CTkToplevel):
-    """Janela de gestão: Apenas o 'Mestre' pode cadastrar e deletar"""
-    def __init__(self, master, conn, usuario_logado):
-        super().__init__(master)
-        self.conn = conn
-        self.usuario_logado = usuario_logado.lower() # Normaliza para checagem
-        self.title("Equipe BarberAgente")
-        self.geometry("450x650")
-        self.attributes("-topmost", True)
-        self.grab_set() 
-        self.setup_ui()
-        self.atualizar_lista_barbeiros()
-
-    def setup_ui(self):
-        # --- SEÇÃO DE CADASTRO (Bloqueada se não for Admin) ---
-        ctk.CTkLabel(self, text="NOVO BARBEIRO", font=("Impact", 25), text_color="#3b8ed0").pack(pady=(20, 10))
-        
-        self.frame_add = ctk.CTkFrame(self, border_width=2, corner_radius=15)
-        self.frame_add.pack(pady=10, padx=30, fill="x")
-
-        self.ent_novo_user = ctk.CTkEntry(self.frame_add, placeholder_text="Nome de Usuário", width=250)
-        self.ent_novo_user.pack(pady=(15, 5))
-
-        self.ent_nova_pass = ctk.CTkEntry(self.frame_add, placeholder_text="Senha", show="*", width=250)
-        self.ent_nova_pass.pack(pady=5)
-
-        self.btn_salvar = ctk.CTkButton(self.frame_add, text="CADASTRAR", 
-                                        fg_color="#28a745", hover_color="#218838", font=("Arial", 12, "bold"),
-                                        command=self.salvar_usuario)
-        self.btn_salvar.pack(pady=15)
-
-        # Restrição visual: Desabilita cadastro para quem não é Mestre
-        if self.usuario_logado != "mestre":
-            self.ent_novo_user.configure(state="disabled", placeholder_text="Apenas Admin pode cadastrar")
-            self.ent_nova_pass.configure(state="disabled")
-            self.btn_salvar.configure(state="disabled", fg_color="gray")
-
-        # --- SEÇÃO DE LISTAGEM ---
-        ctk.CTkLabel(self, text="BARBEIROS ATIVOS", font=("Impact", 20)).pack(pady=(20, 5))
-        
-        self.scroll_lista = ctk.CTkScrollableFrame(self, width=380, height=250, border_width=2)
-        self.scroll_lista.pack(pady=10, padx=30, fill="both", expand=True)
-
-    def salvar_usuario(self):
-        if self.usuario_logado != "mestre":
-            messagebox.showerror("Acesso Negado", "Você não tem permissão para cadastrar.")
-            return
-            
-        user = self.ent_novo_user.get().strip()
-        senha = self.ent_nova_pass.get().strip()
-        
-        if not user or not senha:
-            messagebox.showwarning("Aviso", "Preencha todos os campos!")
-            return
-
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute("INSERT INTO Usuarios (Usuario, Senha) VALUES (?, ?)", (user, senha))
-            self.conn.commit()
-            self.ent_novo_user.delete(0, 'end')
-            self.ent_nova_pass.delete(0, 'end')
-            self.atualizar_lista_barbeiros()
-            messagebox.showinfo("Sucesso", "Barbeiro adicionado!")
-        except Exception as e:
-            messagebox.showerror("Erro", f"Falha: {e}")
-
-    def atualizar_lista_barbeiros(self):
-        for widget in self.scroll_lista.winfo_children():
-            widget.destroy()
-
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute("SELECT Usuario FROM Usuarios ORDER BY Usuario ASC")
-            usuarios = cursor.fetchall()
-
-            for (nome,) in usuarios:
-                linha = ctk.CTkFrame(self.scroll_lista, fg_color="transparent")
-                linha.pack(fill="x", pady=2)
-
-                ctk.CTkLabel(linha, text=f"👤 {nome}", font=("Arial", 12)).pack(side="left", padx=10)
-                
-                # SÓ MOSTRA O BOTÃO DE REMOVER SE O LOGADO FOR 'MESTRE'
-                # E NÃO PERMITE QUE O MESTRE DELETE A SI MESMO
-                if self.usuario_logado == "mestre" and nome.lower() != "mestre":
-                    btn_del = ctk.CTkButton(linha, text="REMOVER", width=70, height=24,
-                                            fg_color="#C0392B", hover_color="#962D22",
-                                            command=lambda n=nome: self.deletar_usuario(n))
-                    btn_del.pack(side="right", padx=10)
-                elif nome.lower() == "mestre":
-                    ctk.CTkLabel(linha, text="[ADMIN]", text_color="gray").pack(side="right", padx=10)
-        except Exception as e:
-            print(f"Erro ao listar: {e}")
-
-    def deletar_usuario(self, nome_user):
-        if self.usuario_logado != "mestre":
-            messagebox.showerror("Erro", "Ação não permitida.")
-            return
-
-        if messagebox.askyesno("Confirmar", f"Remover o acesso de '{nome_user}'?"):
-            try:
-                cursor = self.conn.cursor()
-                cursor.execute("DELETE FROM Usuarios WHERE Usuario = ?", (nome_user,))
-                self.conn.commit()
-                self.atualizar_lista_barbeiros()
-                messagebox.showinfo("Sucesso", "Usuário removido.")
-            except Exception as e:
-                messagebox.showerror("Erro", f"Erro: {e}")
+from tkinter import ttk, messagebox
+from tkcalendar import Calendar
+from database.connection import conectar
+from datetime import datetime, timedelta
+import pywhatkit as kit
+import pyautogui
+import threading
+import time
 
 class BarberAgenteApp(ctk.CTk):
-    def __init__(self, usuario_atual="Barbeiro", on_logout=None): # Recebe quem logou
+    def __init__(self, usuario_logado):
         super().__init__()
-        self.on_logout = on_logout 
-        self.usuario_atual = usuario_atual
-        self.title(f"BarberAgente v1.0 - Logado como: {self.usuario_atual}")
-        self.geometry("550x850") 
+        self.user = usuario_logado
+        self.title(f"BarberAgente - {self.user['nome']}")
+        self.geometry("1250x850")
         
-        self.conn = inicializar_banco()
-        if not self.conn:
-            messagebox.showerror("Erro", "Falha na conexão com o banco.")
-            self.destroy()
-            return
-        self.cursor = self.conn.cursor()
+        self.barbeiro_id_sel = None
+        self.cliente_id_sel = None
+        self.lista_barbeiros = []
+        self.enviados_hoje = set() 
 
-        self.configurar_icone_taskbar()
         self.setup_ui()
-        self.atualizar_relogio()
-        self.atualizar_lista_agenda()
-
-    def configurar_icone_taskbar(self):
-        caminho_icone = os.path.join(ROOT_DIR, "public", "img", "icon.ico")
-        if os.path.exists(caminho_icone):
-            try:
-                self.iconbitmap(caminho_icone)
-            except: pass
+        self.carregar_barbeiros()
+        
+        # Inicia o monitor de WhatsApp em segundo plano
+        threading.Thread(target=self.loop_verificacao_whatsapp, daemon=True).start()
 
     def setup_ui(self):
-        # Botão Gestão
-        self.btn_admin = ctk.CTkButton(self, text="⚙ GESTÃO BARBEIROS", font=("Arial", 11, "bold"),
-                                       fg_color="#444", hover_color="#666", width=100,
-                                       command=self.abrir_gestao_usuarios)
-        self.btn_admin.place(x=20, y=20)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-        self.btn_logout = ctk.CTkButton(self, text="⬅ SAIR", font=("Arial", 11, "bold"),
-                                        fg_color="#E74C3C", hover_color="#C0392B", width=100,
-                                        command=self.executar_logout)
-        self.btn_logout.place(x=430, y=20)
+        # --- PAINEL ESQUERDO ---
+        self.f_left = ctk.CTkFrame(self, width=400, corner_radius=15)
+        self.f_left.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
 
-        self.lbl_nome_app = ctk.CTkLabel(self, text="BARBER AGENTE", font=("Impact", 35), text_color="#3b8ed0")
-        self.lbl_nome_app.pack(pady=(70, 0))
+        ctk.CTkLabel(self.f_left, text="1. Profissional:", font=("Arial", 14, "bold")).pack(pady=(20, 5))
+        self.combo_barbeiro = ctk.CTkComboBox(self.f_left, width=320, command=self.ao_selecionar_barbeiro)
+        self.combo_barbeiro.pack(pady=5)
 
-        # Mostra o nome do usuário na tela principal para saber quem está operando
-        self.lbl_user_info = ctk.CTkLabel(self, text=f"Operador: {self.usuario_atual}", text_color="gray")
-        self.lbl_user_info.pack()
+        ctk.CTkLabel(self.f_left, text="2. Data:", font=("Arial", 14, "bold")).pack(pady=(15, 5))
+        self.cal = Calendar(self.f_left, locale='pt_BR', selectmode='day', font="Arial 10")
+        self.cal.pack(pady=5, padx=10)
+        self.cal.bind("<<CalendarSelected>>", lambda e: self.atualizar_grid())
 
-        self.lbl_relogio = ctk.CTkLabel(self, text="", font=("Arial", 18, "bold"))
-        self.lbl_relogio.pack(pady=5)
+        ctk.CTkLabel(self.f_left, text="3. Horário:", font=("Arial", 14, "bold")).pack(pady=(15, 5))
+        horarios = [f"{h:02d}:{m:02d}" for h in range(8, 21) for m in [0, 15, 30, 45]]
+        self.combo_hora = ctk.CTkComboBox(self.f_left, width=150, values=horarios)
+        self.combo_hora.set("08:00")
+        self.combo_hora.pack(pady=5)
 
-        self.frame_inputs = ctk.CTkFrame(self, border_width=2, corner_radius=10)
-        self.frame_inputs.pack(pady=20, padx=20, fill="x")
+        ctk.CTkLabel(self.f_left, text="4. Pesquisar Cliente:", font=("Arial", 14, "bold")).pack(pady=(15, 5))
+        self.ent_busca = ctk.CTkEntry(self.f_left, placeholder_text="Digite o nome...", width=320)
+        self.ent_busca.pack(pady=5)
+        ctk.CTkButton(self.f_left, text="Validar Cliente", command=self.buscar_cliente, fg_color="#3b8ed0").pack(pady=5)
+        self.lbl_status_cli = ctk.CTkLabel(self.f_left, text="Nenhum cliente selecionado", text_color="orange")
+        self.lbl_status_cli.pack()
 
-        ctk.CTkLabel(self.frame_inputs, text="Selecione a Data:", font=("Arial", 13, "bold")).pack(pady=(10, 0))
-        self.cal = DateEntry(self.frame_inputs, width=15, background='#3b8ed0', 
-                             foreground='white', borderwidth=2, year=2026, 
-                             locale='pt_BR', date_pattern='y-mm-dd')
-        self.cal.pack(pady=10)
+        # --- PAINEL DIREITO ---
+        self.f_right = ctk.CTkFrame(self, corner_radius=15)
+        self.f_right.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
+        ctk.CTkLabel(self.f_right, text="AGENDA DO DIA", font=("Impact", 28)).pack(pady=20)
+        
+        # Definição das Colunas
+        self.tree = ttk.Treeview(self.f_right, columns=("ID", "Data", "Hora", "Cliente", "Servico"), show="headings")
+        self.tree.heading("ID", text="ID")
+        self.tree.heading("Data", text="Data")
+        self.tree.heading("Hora", text="Horário")
+        self.tree.heading("Cliente", text="Nome do Cliente") # Título corrigido
+        self.tree.heading("Servico", text="Serviço")
+        
+        self.tree.column("ID", width=50, anchor="center")
+        self.tree.column("Cliente", width=200, anchor="w")
+        self.tree.pack(expand=True, fill="both", padx=20, pady=10)
+        
+        self.btn_cancelar = ctk.CTkButton(self.f_right, text="CANCELAR AGENDAMENTO SELECIONADO", fg_color="#cc3333", hover_color="#990000", command=self.deletar_agendamento)
+        self.btn_cancelar.pack(pady=10)
 
-        self.time_frame = ctk.CTkFrame(self.frame_inputs, fg_color="transparent")
-        self.time_frame.pack(pady=10)
-        self.ent_hora = ctk.CTkComboBox(self.time_frame, width=90, values=[f"{i:02d}" for i in range(8, 21)])
-        self.ent_hora.set("10")
-        self.ent_hora.pack(side="left", padx=5)
-        ctk.CTkLabel(self.time_frame, text=":", font=("Arial", 18, "bold")).pack(side="left")
-        self.ent_minuto = ctk.CTkComboBox(self.time_frame, width=90, values=["00", "15", "30", "45"])
-        self.ent_minuto.set("00")
-        self.ent_minuto.pack(side="left", padx=5)
+        # --- RODAPÉ (MANUTENÇÃO DE CADASTROS) ---
+        self.f_bottom = ctk.CTkFrame(self, fg_color="transparent")
+        self.f_bottom.grid(row=1, column=0, columnspan=2, padx=20, pady=20, sticky="ew")
+        
+        ctk.CTkButton(self.f_bottom, text="LOGOUT", fg_color="#d35b5b", command=self.destroy).pack(side="left", padx=10)
+        ctk.CTkButton(self.f_bottom, text="Gerenciar Barbeiros", command=self.abrir_gerenciar).pack(side="left", padx=10)
+        ctk.CTkButton(self.f_bottom, text="Novo Cliente", command=self.abrir_cadastro_cliente).pack(side="left", padx=10)
+        ctk.CTkButton(self.f_bottom, text="CONFIRMAR NOVO AGENDAMENTO", fg_color="#2fa572", height=45, font=("Arial", 14, "bold"), command=self.salvar_agendamento).pack(side="right", padx=10)
 
-        self.btn_agendar = ctk.CTkButton(self, text="VERIFICAR E AGENDAR", font=("Arial", 14, "bold"),
-                                         fg_color="#3b8ed0", height=45, command=self.processar_agendamento)
-        self.btn_agendar.pack(pady=20)
-
-        self.scroll_agenda = ctk.CTkScrollableFrame(self, width=450, height=300, border_width=2)
-        self.scroll_agenda.pack(pady=10, padx=20, fill="both", expand=True)
-
-    def abrir_gestao_usuarios(self):
-        # Passa o nome do usuário logado para a janela filha
-        JanelaGerenciarUsuarios(self, self.conn, self.usuario_atual)
-
-    def executar_logout(self):
-        if messagebox.askyesno("Sair", "Deseja encerrar a sessão?"):
-            self.destroy()
-            if self.on_logout: self.on_logout()
-
-    # ... (restante dos métodos processar_agendamento, atualizar_relogio, atualizar_lista_agenda, cancelar)
-    def processar_agendamento(self):
+    # --- LÓGICA WHATSAPP AUTOMÁTICA ---
+    def disparar_whatsapp(self, nome, telefone, hora):
+        msg = f"Olá {nome}! Passando para lembrar do seu horário hoje às {hora} na BarberAgente. Até já!"
         try:
-            data_selecionada = self.cal.get_date()
-            data_hora_agendamento = datetime(data_selecionada.year, data_selecionada.month, data_selecionada.day, 
-                                             int(self.ent_hora.get()), int(self.ent_minuto.get()))
-            if data_hora_agendamento < datetime.now():
-                messagebox.showerror("Erro", "Não agende no passado!")
+            tel_limpo = ''.join(filter(str.isdigit, str(telefone)))
+            if not tel_limpo.startswith('55'): tel_limpo = "55" + tel_limpo
+            tel_final = "+" + tel_limpo
+            
+            kit.sendwhatmsg_instantly(tel_final, msg, wait_time=15, tab_close=True)
+            time.sleep(4)
+            pyautogui.press('enter') 
+            time.sleep(2)
+            pyautogui.hotkey('ctrl', 'w') 
+        except Exception as e:
+            print(f"Erro envio: {e}")
+
+    def loop_verificacao_whatsapp(self):
+        while True:
+            agora = datetime.now()
+            inicio, fim = agora.replace(microsecond=0), (agora + timedelta(minutes=15)).replace(microsecond=0)
+            conn = conectar()
+            if conn:
+                try:
+                    cursor = conn.cursor()
+                    query = "SELECT c.nome, c.telefone, a.id, CONVERT(VARCHAR(5), a.data_hora, 108) FROM Agendamentos a INNER JOIN Clientes c ON a.cliente_id = c.id WHERE a.data_hora >= ? AND a.data_hora <= ?"
+                    cursor.execute(query, (inicio, fim))
+                    for nome, telefone, agend_id, hora in cursor.fetchall():
+                        if agend_id not in self.enviados_hoje:
+                            self.disparar_whatsapp(nome, telefone, hora)
+                            self.enviados_hoje.add(agend_id)
+                except Exception as e: print(f"Erro monitor: {e}")
+                finally: conn.close()
+            time.sleep(30)
+
+    # --- LÓGICA DE DADOS ---
+    def atualizar_grid(self):
+        for i in self.tree.get_children(): self.tree.delete(i)
+        if not self.barbeiro_id_sel: return
+        data_sql = self.cal.selection_get().strftime('%Y-%m-%d')
+        conn = conectar()
+        if conn:
+            cursor = conn.cursor()
+            # MUDANÇA AQUI: Alterada a ordem do SELECT para bater com as colunas da Treeview
+            query = """
+                SELECT a.id, 
+                       FORMAT(a.data_hora, 'dd/MM/yyyy'), 
+                       CONVERT(VARCHAR(5), a.data_hora, 108), 
+                       c.nome, 
+                       a.servico
+                FROM Agendamentos a 
+                INNER JOIN Clientes c ON a.cliente_id = c.id
+                WHERE a.barbeiro_id = ? AND CAST(a.data_hora AS DATE) = ? 
+                ORDER BY a.data_hora
+            """
+            cursor.execute(query, (self.barbeiro_id_sel, data_sql))
+            for row in cursor.fetchall():
+                # Agora o row[3] é o Nome e o row[4] é o Serviço
+                self.tree.insert("", "end", values=(row[0], row[1], row[2], row[3], row[4]))
+            conn.close()
+
+    def deletar_agendamento(self):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showwarning("Aviso", "Selecione um agendamento na lista para deletar.")
+            return
+        
+        valores = self.tree.item(selected_item)['values']
+        if not valores: return
+        agendamento_id = valores[0]
+
+        if messagebox.askyesno("Confirmar", f"Deseja realmente excluir o agendamento ID {agendamento_id}?"):
+            conn = conectar()
+            if conn:
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM Agendamentos WHERE id = ?", (agendamento_id,))
+                    conn.commit()
+                    messagebox.showinfo("Sucesso", "Agendamento removido!")
+                    self.atualizar_grid()
+                except Exception as e:
+                    messagebox.showerror("Erro", f"Não foi possível deletar: {e}")
+                finally:
+                    conn.close()
+
+    def salvar_agendamento(self):
+        # 1. Validação básica de seleção
+        if not self.barbeiro_id_sel or not self.cliente_id_sel:
+            messagebox.showwarning("Atenção", "Selecione o Barbeiro e valide o Cliente antes de confirmar.")
+            return
+        
+        # 2. Captura e conversão da data/hora
+        try:
+            data_sel = self.cal.selection_get() 
+            hora_sel = self.combo_hora.get()
+            dt_obj = datetime.strptime(f"{data_sel} {hora_sel}", "%Y-%m-%d %H:%M")
+            
+            # --- REGRA DE NEGÓCIO 1: Bloquear agendamentos no passado ---
+            if dt_obj < datetime.now():
+                messagebox.showerror("Erro de Regra", "Não é possível realizar agendamentos em datas ou horários que já passaram.")
                 return
 
-            data_hora_iso = data_hora_agendamento.strftime('%Y-%m-%dT%H:%M:%S')
-            self.cursor.execute("INSERT INTO Agendamentos (DataHora, ClienteId, BarbeiroId) VALUES (?, 1, 99)", (data_hora_iso,))
-            self.conn.commit()
-            messagebox.showinfo("Sucesso", "Agendado!")
-            self.atualizar_lista_agenda()
+            conn = conectar()
+            if conn:
+                cursor = conn.cursor()
+                
+                # --- REGRA DE NEGÓCIO 2: Bloquear conflito de horário para o mesmo barbeiro ---
+                query_conflito = """
+                    SELECT TOP 1 c.nome 
+                    FROM Agendamentos a
+                    INNER JOIN Clientes c ON a.cliente_id = c.id
+                    WHERE a.barbeiro_id = ? AND a.data_hora = ?
+                """
+                cursor.execute(query_conflito, (self.barbeiro_id_sel, dt_obj))
+                conflito = cursor.fetchone()
+                
+                if conflito:
+                    messagebox.showerror("Conflito de Horário", 
+                                       f"Este barbeiro já possui um agendamento neste horário!\n\nCliente: {conflito[0]}")
+                    conn.close()
+                    return
+
+                # 3. Inserção se passar em todas as regras
+                cursor.execute("""
+                    INSERT INTO Agendamentos (barbeiro_id, cliente_id, data_hora, servico) 
+                    VALUES (?, ?, ?, ?)
+                """, (self.barbeiro_id_sel, self.cliente_id_sel, dt_obj, "Corte Normal"))
+                
+                conn.commit()
+                conn.close()
+                
+                messagebox.showinfo("Sucesso", "Agendamento confirmado com sucesso!")
+                self.atualizar_grid()
+                
         except Exception as e:
-            messagebox.showerror("Erro", str(e))
+            messagebox.showerror("Erro Crítico", f"Erro ao processar agendamento: {e}")
 
-    def atualizar_relogio(self):
-        self.lbl_relogio.configure(text=f"Horário Atual: {datetime.now().strftime('%H:%M:%S')}")
-        self.after(1000, self.atualizar_relogio)
+    def carregar_barbeiros(self):
+        conn = conectar()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, nome FROM Usuarios ORDER BY nome")
+            rows = cursor.fetchall()
+            self.lista_barbeiros = [{"id": r[0], "nome": r[1]} for r in rows]
+            nomes = [b["nome"] for b in self.lista_barbeiros]
+            if nomes:
+                self.combo_barbeiro.configure(values=nomes); self.combo_barbeiro.set(nomes[0])
+                self.barbeiro_id_sel = self.lista_barbeiros[0]["id"]
+                self.atualizar_grid()
+            conn.close()
 
-    def atualizar_lista_agenda(self):
-        for widget in self.scroll_agenda.winfo_children(): widget.destroy()
-        try:
-            self.cursor.execute("SELECT Id, DataHora FROM Agendamentos ORDER BY DataHora ASC")
-            for registro in self.cursor.fetchall():
-                btn = ctk.CTkButton(self.scroll_agenda, text=f"{registro[1].strftime('%d/%m %H:%M')} - CANCELAR",
-                                    fg_color="#E74C3C", command=lambda i=registro[0]: self.cancelar(i))
-                btn.pack(pady=5, fill="x", padx=10)
-        except: pass
+    def ao_selecionar_barbeiro(self, nome):
+        for b in self.lista_barbeiros:
+            if b["nome"] == nome:
+                self.barbeiro_id_sel = b["id"]; self.atualizar_grid(); break
 
-    def cancelar(self, id_ag):
-        if messagebox.askyesno("Confirmar", "Deseja cancelar?"):
-            self.cursor.execute("DELETE FROM Agendamentos WHERE Id = ?", (id_ag,))
-            self.conn.commit()
-            self.atualizar_lista_agenda()
+    def buscar_cliente(self):
+        nome = self.ent_busca.get().strip()
+        if not nome: return
+        conn = conectar()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, nome FROM Clientes WHERE nome LIKE ?", (f"%{nome}%",))
+            res = cursor.fetchone()
+            if res:
+                self.cliente_id_sel = res[0]
+                self.lbl_status_cli.configure(text=f"Selecionado: {res[1]}", text_color="#2fa572")
+            else: messagebox.showwarning("Busca", "Não encontrado.")
+            conn.close()
 
-if __name__ == "__main__":
-    # Para teste direto, simulamos o admin logado
-    app = BarberAgenteApp(usuario_atual="Mestre")
-    app.mainloop()
+    def abrir_gerenciar(self):
+        from ui.gerenciar_barbeiros import GerenciarBarbeiroApp
+        GerenciarBarbeiroApp(self, self.user)
+
+    def abrir_cadastro_cliente(self):
+        from ui.cadastro_clientes import CadastroClienteApp
+        CadastroClienteApp(self)
