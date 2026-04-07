@@ -54,11 +54,11 @@ class SistemaBarber:
         
         self.app_principal.mainloop()
 
-    def iniciar():
-        try:
-            SistemaBarber()
-        except Exception as e:
-            print(f"Erro crítico no sistema: {e}")
+def iniciar():
+    try:
+        SistemaBarber()
+    except Exception as e:
+        print(f"Erro crítico no sistema: {e}")
 
-    if __name__ == "__main__":
-        iniciar()
+if __name__ == "__main__":
+    iniciar()
