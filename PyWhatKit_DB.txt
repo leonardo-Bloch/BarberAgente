@@ -43,3 +43,33 @@ Time: 19:19
 Phone Number: +5511972671050
 Message: Olá Jovana! Passando para lembrar do seu horário hoje às 19:30 na BarberAgente. Até já!
 --------------------
+Date: 4/5/2026
+Time: 15:35
+Phone Number: +5511998156673
+Message: Olá Leonardo! Passando para lembrar do seu horário hoje às 15:45 na BarberAgente. Até já!
+--------------------
+Date: 4/5/2026
+Time: 15:40
+Phone Number: +5511998156673
+Message: Olá Leonardo! Passando para lembrar do seu horário hoje às 15:45 na BarberAgente. Até já!
+--------------------
+Date: 4/5/2026
+Time: 15:44
+Phone Number: +5511998156673
+Message: Olá Leonardo! Passando para lembrar do seu horário hoje às 15:45 na BarberAgente. Até já!
+--------------------
+Date: 4/5/2026
+Time: 15:45
+Phone Number: +5511972671050
+Message: Olá Jovana! Passando para lembrar do seu horário hoje às 16:00 na BarberAgente. Até já!
+--------------------
+Date: 1/6/2026
+Time: 17:59
+Phone Number: +5511998156673
+Message: Olá Leonardo! Passando para lembrar do seu horário hoje às 19:00 na BarberAgente. Por favor, responda com SIM para confirmar ou NÃO para cancelar. Até já!
+--------------------
+Date: 1/6/2026
+Time: 18:0
+Phone Number: +5511998156673
+Message: Olá Leonardo! Passando para lembrar do seu horário hoje às 19:00 na BarberAgente. Por favor, responda com SIM para confirmar ou NÃO para cancelar. Até já!
+--------------------

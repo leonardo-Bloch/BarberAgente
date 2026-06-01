@@ -1,12 +1,14 @@
 import customtkinter as ctk
 from tkinter import ttk, messagebox
 import re
-from database.connection import conectar
+from database.data_manager import DataManager
 
 class GerenciarBarbeiroApp(ctk.CTkToplevel):
-    def __init__(self, parent, usuario_logado):
+    def __init__(self, parent, usuario_logado, on_close_callback=None):
         super().__init__(parent)
+        self.db_manager = DataManager()
         self.user = usuario_logado
+        self.on_close_callback = on_close_callback
         self.title("Gerenciar Profissionais")
         self.geometry("650x750")
         self.grab_set() 
@@ -54,25 +56,14 @@ class GerenciarBarbeiroApp(ctk.CTkToplevel):
             messagebox.showwarning("Erro", "Preencha todos os campos!")
             return
 
-        conn = conectar()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                # USANDO APENAS A COLUNA 'nome' CONFORME A NOVA TABELA
-                cursor.execute(
-                    "INSERT INTO Usuarios (nome, senha, tipo_acesso) VALUES (?, ?, 'Barbeiro')",
-                    (nome, senha)
-                )
-                conn.commit() # Importante se autocommit não estiver ligado
-                messagebox.showinfo("Sucesso", f"{nome} cadastrado!")
-                self.ent_nome.delete(0, 'end')
-                self.ent_senha.delete(0, 'end')
-                self.atualizar_grid()
-            except Exception as e:
-                print(f"Erro SQL: {e}")
-                messagebox.showerror("Erro", "Nome já existe ou erro de conexão.")
-            finally:
-                conn.close()
+        sucesso = self.db_manager.save_barber(nome, senha)
+        if sucesso:
+            messagebox.showinfo("Sucesso", f"{nome} cadastrado!")
+            self.ent_nome.delete(0, 'end')
+            self.ent_senha.delete(0, 'end')
+            self.atualizar_grid()
+        else:
+            messagebox.showerror("Erro", "Nome de usuário já existe ou ocorreu um erro de banco de dados.")
 
     def deletar_barbeiro(self):
         sel = self.tree.selection()
@@ -86,20 +77,24 @@ class GerenciarBarbeiroApp(ctk.CTkToplevel):
             return
 
         if messagebox.askyesno("Confirmar", f"Excluir {nome_user}?"):
-            conn = conectar()
-            if conn:
-                conn.cursor().execute("DELETE FROM Usuarios WHERE id = ?", (id_user,))
-                conn.commit()
-                conn.close()
+            sucesso = self.db_manager.delete_barber(id_user)
+            if sucesso:
                 self.atualizar_grid()
+            else:
+                messagebox.showerror("Erro", "Não foi possível excluir o usuário.")
 
     def atualizar_grid(self):
         for i in self.tree.get_children(): self.tree.delete(i)
-        conn = conectar()
-        if conn:
-            cursor = conn.cursor()
-            # Busca as 3 colunas que existem na nova tabela
-            cursor.execute("SELECT id, nome, tipo_acesso FROM Usuarios")
-            for row in cursor.fetchall():
+        usuarios = self.db_manager.get_all_barbers_details()
+        if usuarios:
+            for row in usuarios:
                 self.tree.insert("", "end", values=(row[0], row[1], row[2]))
-            conn.close()
+
+    def destroy(self):
+        """
+        Sobrescreve o método de fechar a janela para garantir que a tela 
+        principal seja atualizada.
+        """
+        if self.on_close_callback:
+            self.on_close_callback()
+        super().destroy()

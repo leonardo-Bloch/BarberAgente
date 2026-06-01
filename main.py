@@ -22,13 +22,21 @@ class SistemaBarber:
         print("Conectando ao SQL Server e verificando tabelas...")
         inicializar_banco()
         
-        # Configuração Global de Tema
-        ctk.set_appearance_mode("dark")
+        # Configuração Global de Tema e Estado
+        self.current_theme = "dark" # 'dark' ou 'light'
+        ctk.set_appearance_mode(self.current_theme)
         ctk.set_default_color_theme("blue")
         
         # Inicia o fluxo de login
         self.usuario_logado = None
         self.mostrar_login()
+
+    def toggle_theme(self):
+        """Alterna o tema entre claro e escuro e atualiza a UI."""
+        self.current_theme = "light" if self.current_theme == "dark" else "dark"
+        ctk.set_appearance_mode(self.current_theme)
+        print(f"Tema alterado para: {self.current_theme}")
+        return self.current_theme
 
     def mostrar_login(self):
         """Abre a tela de login e aguarda o sucesso."""
@@ -47,12 +55,19 @@ class SistemaBarber:
 
     def mostrar_calendario(self):
         """Abre a tela principal do sistema."""
-        self.app_principal = BarberAgenteApp(self.usuario_logado)
-        
-        # Caso precise de uma função de Logout no futuro:
-        # self.app_principal.btn_logout.configure(command=self.realizar_logout)
-        
+        self.app_principal = BarberAgenteApp(self.usuario_logado, self.toggle_theme)
+
+        # Associa o botão de logout à função de reinicialização
+        self.app_principal.protocol("WM_DELETE_WINDOW", self.app_principal.destroy) # Garante que fechar no 'X' encerre
+        logout_button = self.app_principal.f_bottom.winfo_children()[0] # Acessa o botão de logout
+        logout_button.configure(command=self.realizar_logout)
+
         self.app_principal.mainloop()
+
+    def realizar_logout(self):
+        """Fecha a tela principal e volta para a tela de login."""
+        self.app_principal.destroy()
+        self.mostrar_login()
 
 def iniciar():
     try:

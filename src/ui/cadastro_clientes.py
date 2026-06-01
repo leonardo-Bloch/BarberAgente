@@ -1,10 +1,11 @@
 import customtkinter as ctk
 from tkinter import ttk, messagebox
-from database.connection import conectar
+from database.data_manager import DataManager
 
 class CadastroClienteApp(ctk.CTkToplevel):
     def __init__(self, parent):
         super().__init__(parent)
+        self.db_manager = DataManager()
         self.parent = parent # Referência para a tela de calendário
         self.title("BarberAgente - Cadastrar Cliente")
         self.geometry("600x700")
@@ -67,59 +68,35 @@ class CadastroClienteApp(ctk.CTkToplevel):
             messagebox.showwarning("Aviso", "Preencha todos os campos obrigatórios!")
             return
 
-        conn = conectar()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                
-                # Verificação de segurança: evita cadastrar o mesmo telefone duas vezes
-                cursor.execute("SELECT id FROM Clientes WHERE telefone = ?", (tel,))
-                if cursor.fetchone():
-                    messagebox.showerror("Erro", "Este número de telefone já está cadastrado!")
-                    return
+        try:
+            if self.db_manager.check_client_phone_exists(tel):
+                messagebox.showerror("Erro", "Este número de telefone já está cadastrado!")
+                return
 
-                cursor.execute(
-                    "INSERT INTO Clientes (nome, telefone) VALUES (?, ?)",
-                    (nome, tel)
-                )
-                conn.commit()
-                
+            sucesso = self.db_manager.save_client(nome, tel)
+            if sucesso:
                 messagebox.showinfo("Sucesso", f"Cliente {nome} cadastrado com sucesso!")
-                
-                # Limpa os campos
                 self.ent_nome.delete(0, 'end')
                 self.ent_tel.delete(0, 'end')
-                
-                # Atualiza a lista da janela atual
                 self.atualizar_grid_clientes()
                 
-                # Opcional: Se quiser que o nome já apareça na busca da tela principal
                 if hasattr(self.parent, 'ent_busca'):
                     self.parent.ent_busca.delete(0, 'end')
                     self.parent.ent_busca.insert(0, nome)
-                
-            except Exception as e:
-                messagebox.showerror("Erro no Banco", f"Não foi possível salvar: {e}")
-            finally:
-                conn.close()
+            else:
+                messagebox.showerror("Erro no Banco", "Não foi possível salvar o cliente.")
+
+        except Exception as e:
+            messagebox.showerror("Erro Crítico", f"Ocorreu um erro: {e}")
 
     def atualizar_grid_clientes(self):
         for i in self.tree.get_children():
             self.tree.delete(i)
             
-        conn = conectar()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                # Usei CONVERT para ser mais compatível com todas as versões do SQL Server
-                cursor.execute("""
-                    SELECT nome, telefone, CONVERT(VARCHAR(16), data_cadastro, 120) 
-                    FROM Clientes 
-                    ORDER BY id DESC
-                """)
-                for row in cursor.fetchall():
+        try:
+            clientes = self.db_manager.get_recent_clients()
+            if clientes:
+                for row in clientes:
                     self.tree.insert("", "end", values=row)
-            except Exception as e:
-                print(f"Erro ao listar clientes: {e}")
-            finally:
-                conn.close()
+        except Exception as e:
+            print(f"Erro ao listar clientes: {e}")

@@ -34,7 +34,7 @@ def conectar():
         print(f"Erro ao conectar ao SQL Server: {e}")
         return None
 
-def inicializar_banco():
+def inicializar_banco(for_testing=False):
     """Cria as tabelas e garante a integridade dos dados."""
     conn = conectar()
     if not conn: 
@@ -44,6 +44,13 @@ def inicializar_banco():
     try:
         cursor = conn.cursor()
         
+        if for_testing:
+            # Garante um ambiente de teste limpo, recriando as tabelas na ordem correta.
+            cursor.execute("IF OBJECT_ID('Agendamentos', 'U') IS NOT NULL DROP TABLE Agendamentos")
+            cursor.execute("IF OBJECT_ID('Servicos', 'U') IS NOT NULL DROP TABLE Servicos")
+            cursor.execute("IF OBJECT_ID('Clientes', 'U') IS NOT NULL DROP TABLE Clientes")
+            cursor.execute("IF OBJECT_ID('Usuarios', 'U') IS NOT NULL DROP TABLE Usuarios")
+
         # 1. Tabela de Usuarios (Barbeiros)
         # Removida a coluna redundante 'Usuario' se existia, focando em 'nome'
         cursor.execute("""
@@ -67,21 +74,34 @@ def inicializar_banco():
             )
         """)
 
-        # 3. Tabela de Agendamentos (com ON DELETE CASCADE)
+        # 3. Tabela de Serviços
+        cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Servicos' AND xtype='U')
+            CREATE TABLE Servicos (
+                id INT PRIMARY KEY IDENTITY,
+                nome NVARCHAR(100) UNIQUE NOT NULL,
+                preco DECIMAL(10, 2) NOT NULL,
+                duracao_minutos INT NOT NULL DEFAULT 30
+            )
+        """)
+
+        # 4. Tabela de Agendamentos (com ON DELETE CASCADE)
         cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Agendamentos' AND xtype='U')
             CREATE TABLE Agendamentos (
                 id INT PRIMARY KEY IDENTITY,
                 barbeiro_id INT,
                 cliente_id INT,
+                servico_id INT,
                 data_hora DATETIME,
-                servico NVARCHAR(100) DEFAULT 'Corte Especial',
+                status NVARCHAR(20) DEFAULT 'Agendado',
                 FOREIGN KEY (barbeiro_id) REFERENCES Usuarios(id) ON DELETE CASCADE,
-                FOREIGN KEY (cliente_id) REFERENCES Clientes(id) ON DELETE CASCADE
+                FOREIGN KEY (cliente_id) REFERENCES Clientes(id) ON DELETE CASCADE,
+                FOREIGN KEY (servico_id) REFERENCES Servicos(id)
             )
         """)
 
-        # 4. Inserção do Admin Padrão
+        # 5. Inserção do Admin Padrão
         cursor.execute("""
             IF NOT EXISTS (SELECT 1 FROM Usuarios WHERE nome = 'Mestre Admin')
             BEGIN
@@ -90,6 +110,26 @@ def inicializar_banco():
             END
         """)
         
+        # 6. Inserção de Serviços Padrão
+        cursor.execute("""
+            IF NOT EXISTS (SELECT 1 FROM Servicos)
+            BEGIN
+                INSERT INTO Servicos (nome, preco, duracao_minutos) VALUES 
+                ('Corte Normal', 35.00, 30),
+                ('Corte + Barba', 55.00, 60),
+                ('Barba Terapia', 30.00, 45)
+            END
+        """)
+
+        # 7. Inserção de Cliente Padrão para Testes
+        cursor.execute("""
+            IF NOT EXISTS (SELECT 1 FROM Clientes)
+            BEGIN
+                INSERT INTO Clientes (nome, telefone) 
+                VALUES ('Cliente Padrão', '(00) 00000-0000')
+            END
+        """)
+
         print("Estrutura de tabelas verificada com sucesso!")
 
     except Exception as e:
